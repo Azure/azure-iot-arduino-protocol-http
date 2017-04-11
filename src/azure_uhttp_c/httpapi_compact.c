@@ -2,12 +2,10 @@
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
 #include <stdlib.h>
-#ifdef _CRTDBG_MAP_ALLOC
-#include <crtdbg.h>
-#endif
-
 #include <stdio.h>
 #include <ctype.h>
+#include <string.h>
+#include <limits.h>
 #include "azure_c_shared_utility/gballoc.h"
 #include "azure_c_shared_utility/httpheaders.h"
 #include "azure_c_shared_utility/crt_abstractions.h"
@@ -17,8 +15,6 @@
 #include "azure_c_shared_utility/tlsio.h"
 #include "azure_c_shared_utility/threadapi.h"
 #include "azure_c_shared_utility/shared_util_options.h"
-#include <string.h>
-#include <limits.h>
 
 /*Codes_SRS_HTTPAPI_COMPACT_21_001: [ The httpapi_compact shall implement the methods defined by the `httpapi.h`. ]*/
 /*Codes_SRS_HTTPAPI_COMPACT_21_002: [ The httpapi_compact shall support the http requests. ]*/
@@ -60,8 +56,8 @@ static int ParseStringToDecimal(const char *src, int* dst)
 {
     int result;
     char* next;
-    (*dst) = strtol(src, &next, 0);
-    if ((src == next) || ((((*dst) == LONG_MAX) || ((*dst) == LONG_MIN)) && (errno != 0)))
+    long num = strtol(src, &next, 0);
+    if (src == next || num < INT_MIN || num > INT_MAX)
     {
         result = EOF;
     }
@@ -69,6 +65,9 @@ static int ParseStringToDecimal(const char *src, int* dst)
     {
         result = 1;
     }
+    if (num < INT_MIN) num = INT_MIN;
+    if (num > INT_MAX) num = INT_MAX;
+    *dst = (int)num;
     return result;
 }
 
@@ -219,6 +218,8 @@ HTTP_HANDLE HTTPAPI_CreateConnection(const char* hostName)
         {
             tlsio_config.hostname = hostName;
             tlsio_config.port = 443;
+            tlsio_config.underlying_io_interface = NULL;
+            tlsio_config.underlying_io_parameters = NULL;
 
             http_instance->xio_handle = xio_create(platform_get_default_tlsio(), (void*)&tlsio_config);
 
@@ -366,24 +367,23 @@ static int InternStrnicmp(const char* s1, const char* s2, size_t n)
 {
     int result;
 
-    if ((s1 == NULL) || (s2 == NULL))
-    {
-        result = -1;
-    }
+    if (s1 == NULL) result = -1;
+    else if (s2 == NULL) result = 1;
     else
     {
         result = 0;
-        while (((n--) >= 0) && ((*s1) != '\0') && ((*s2) != '\0') && (result == 0))
-        {
-            /* compute the difference between the chars */
-            result = TOLOWER(*s1) - TOLOWER(*s2);
-            s1++;
-            s2++;
-        }
 
-        if ((*s2) != '\0')
+        while(n-- && result == 0)
         {
-            result = -1;
+            if (*s1 == 0) result = -1;
+            else if (*s2 == 0) result = 1;
+            else
+            {
+
+                result = TOLOWER(*s1) - TOLOWER(*s2);
+                ++s1;
+                ++s2;
+            }
         }
     }
 
@@ -506,7 +506,7 @@ static int readLine(HTTP_HANDLE_DATA* http_instance, char* buf, const size_t max
 {
     int resultLineSize;
 
-    if ((http_instance == NULL) || (buf == NULL) || (maxBufSize < 0))
+    if ((http_instance == NULL) || (buf == NULL) || (maxBufSize == 0))
     {
         LogError("%s", ((http_instance == NULL) ? "Invalid HTTP instance" : "Invalid HTTP buffer"));
         resultLineSize = -1;
@@ -932,12 +932,12 @@ static HTTPAPI_RESULT RecieveContentInfoFromXIO(HTTP_HANDLE_DATA* http_instance,
     const char* substr;
     char* whereIsColon;
     int lengthInMsg;
-    const char* ContentLength = "content-length:";
-    const int ContentLengthSize = 16;
-    const char* TransferEncoding = "transfer-encoding:";
-    const int TransferEncodingSize = 19;
-    const char* Chunked = "chunked";
-    const int ChunkedSize = 8;
+    const char ContentLength[] = "content-length:";
+    const size_t ContentLengthSize = sizeof(ContentLength) - 1;
+    const char TransferEncoding[] = "transfer-encoding:";
+    const size_t TransferEncodingSize = sizeof(TransferEncoding) - 1;
+    const char Chunked[] = "chunked";
+    const size_t ChunkedSize = sizeof(Chunked) - 1;
 
     http_instance->is_io_error = 0;
 
@@ -957,7 +957,7 @@ static HTTPAPI_RESULT RecieveContentInfoFromXIO(HTTP_HANDLE_DATA* http_instance,
         {
             if (InternStrnicmp(buf, ContentLength, ContentLengthSize) == 0)
             {
-                substr = buf + ContentLengthSize - 1;
+                substr = buf + ContentLengthSize;
                 if (ParseStringToDecimal(substr, &lengthInMsg) != 1)
                 {
                     /*Codes_SRS_HTTPAPI_COMPACT_21_032: [ If the HTTPAPI_ExecuteRequest cannot read the message with the request result, it shall return HTTPAPI_READ_DATA_FAILED. ]*/
@@ -970,7 +970,7 @@ static HTTPAPI_RESULT RecieveContentInfoFromXIO(HTTP_HANDLE_DATA* http_instance,
             }
             else if (InternStrnicmp(buf, TransferEncoding, TransferEncodingSize) == 0)
             {
-                substr = buf + TransferEncodingSize - 1;
+                substr = buf + TransferEncodingSize;
 
                 while (isspace(*substr)) substr++;
 
