@@ -1415,3 +1415,4 @@ HTTPAPI_RESULT HTTPAPI_CloneOption(const char* optionName, const void* value, co
     }
     return result;
 }
+

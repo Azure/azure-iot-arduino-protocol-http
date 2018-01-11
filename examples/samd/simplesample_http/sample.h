@@ -1,9 +1,17 @@
 // Copyright (c) Microsoft. All rights reserved.
 // Licensed under the MIT license. See LICENSE file in the project root for full license information.
 
-#ifndef AZUREIOTPROTOCOLHTTP_H
-#define AZUREIOTPROTOCOLHTTP_H
+#ifndef SAMPLE_H
+#define SAMPLE_H
 
-#define AzureIoTProtocolHTTPVersion "1.0.42"
+#ifdef __cplusplus
+extern "C" {
+#endif
 
-#endif //AZUREIOTPROTOCOLHTTP_H
+    void sample_run(void);
+
+#ifdef __cplusplus
+}
+#endif
+
+#endif /* SAMPLE_H */
